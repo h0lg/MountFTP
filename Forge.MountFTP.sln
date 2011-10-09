@@ -3,6 +3,11 @@ Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual Studio 2010
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Forge.MountFTP", "Forge.MountFTP\Forge.MountFTP.csproj", "{20D6C904-DC5C-45BE-B025-D4FB3198D914}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{D06F8EB0-81BB-4333-B6EE-3A029C8FC5FF}"
+	ProjectSection(SolutionItems) = preProject
+		ReadMe.Developer.txt = ReadMe.Developer.txt
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

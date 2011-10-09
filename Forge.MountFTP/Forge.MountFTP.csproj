@@ -34,7 +34,17 @@
     <Compile Include="..\CommonAssemblyInfo.cs">
       <Link>Properties\CommonAssemblyInfo.cs</Link>
     </Compile>
+    <Compile Include="DokanFtpClient.cs" />
+    <Compile Include="Drive.cs" />
+    <Compile Include="LogEventArgs.cs" />
+    <Compile Include="Options.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="DokanNet">
+      <HintPath>..\libs\DokanNet\x86 Release\DokanNet.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
