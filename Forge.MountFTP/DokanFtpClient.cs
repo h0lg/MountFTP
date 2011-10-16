@@ -18,6 +18,9 @@ namespace Forge.MountFTP
     /// </summary>
     class DokanFtpClient : DokanOperations
     {
+        string bufferedFileName;
+        byte[] bufferedFile;
+        int bufferedBytes;
         readonly FTPSClient fTPSClient;
         readonly IFtpOptions ftpOptions;
         readonly Dictionary<string, DirectoryFileInformation> cachedDirectoryFileInformation = new Dictionary<string, DirectoryFileInformation>();
@@ -182,7 +185,52 @@ namespace Forge.MountFTP
         public int ReadFile(string filename, byte[] buffer, ref uint readBytes, long offset, DokanFileInfo info)
         {
             RaiseMethodCall("ReadFile " + filename);
-            return -1;
+
+            int read = 0;
+
+            // is the request for the file that is currently downloading?
+            if (filename == bufferedFileName)
+            {
+                // read from buffer
+                if ((int)offset < bufferedBytes) // are requested bytes buffered?
+                {
+                    var availableBytes = bufferedBytes - (int)offset;
+                    read = buffer.Length < availableBytes ? // if less bytes than available are requested
+                        buffer.Length : // return the requested bytes
+                        availableBytes; // else return all available bytes
+                    // copy requested bytes to buffer
+                    Array.Copy(
+                        bufferedFile, // source
+                        (int)offset, // source start index
+                        buffer, // target
+                        0, // target start index
+                        read); // number of bytes to copy
+                }
+                else
+                {
+                    // requested bytes are not yet buffered
+                    return -1;
+                }
+            }
+            else
+            {
+                // enqueue new task
+                EnqueueTask(() =>
+                {
+                    using (var ftpStream = fTPSClient.GetFile(filename))
+                    {
+                        bufferedFileName = filename;
+                        bufferedFile = new byte[GetCachedLength(filename)];
+                        int chunkSize;
+                        while ((chunkSize = ftpStream.Read(bufferedFile, read, bufferedFile.Length - read)) != 0)
+                        {
+                            bufferedBytes = read += chunkSize;
+                        }
+                    }
+                }).Wait();
+            }
+            readBytes = (uint)read;
+            return 0;
         }
 
         public int SetAllocationSize(string filename, long length, DokanFileInfo info)
