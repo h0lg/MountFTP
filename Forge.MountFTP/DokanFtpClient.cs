@@ -1,6 +1,13 @@
 ﻿using System;
 using System.Collections;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Net;
+using System.Threading.Tasks;
+using AlexPilotti.FTPS.Client;
+using AlexPilotti.FTPS.Common;
 using Dokan;
 
 namespace Forge.MountFTP
@@ -11,32 +18,74 @@ namespace Forge.MountFTP
     /// </summary>
     class DokanFtpClient : DokanOperations
     {
+        readonly FTPSClient fTPSClient;
+        readonly IFtpOptions ftpOptions;
+        readonly Dictionary<string, DirectoryFileInformation> cachedDirectoryFileInformation = new Dictionary<string, DirectoryFileInformation>();
+        readonly BlockingCollection<Task> fTPSClientTaskQueue = new BlockingCollection<Task>();
+
         internal event LogEventHandler MethodCall, Debug;
+
+        internal DokanFtpClient(FTPSClient fTPSClient, IFtpOptions ftpOptions)
+        {
+            this.fTPSClient = fTPSClient;
+            this.ftpOptions = ftpOptions;
+
+            const string ROOT = "\\";
+            cachedDirectoryFileInformation.Add(
+                ROOT,
+                new DirectoryFileInformation(true)
+                {
+                    FileName = ROOT
+                });
+
+            this.fTPSClient.Connect(
+                ftpOptions.HostName,
+                new NetworkCredential(ftpOptions.UserName, ftpOptions.Password),
+                ESSLSupportMode.ClearText);
+
+            Task.Factory.StartNew(() =>
+            {
+                while (true)
+                {
+                    fTPSClientTaskQueue.Take().RunSynchronously();
+                }
+            });
+        }
 
         #region DokanOperations
 
         public int Cleanup(string filename, DokanFileInfo info)
         {
             RaiseMethodCall("Cleanup " + filename);
-            return -1;
+            return 0;
         }
 
         public int CloseFile(string filename, DokanFileInfo info)
         {
             RaiseMethodCall("CloseFile " + filename);
-            return -1;
+            return 0;
         }
 
         public int CreateDirectory(string filename, DokanFileInfo info)
         {
             RaiseMethodCall("CreateDirectory " + filename);
-            return -1;
+            return 0;
         }
 
         public int CreateFile(string filename, FileAccess access, FileShare share, FileMode mode, FileOptions options, DokanFileInfo info)
         {
             RaiseMethodCall("CreateFile " + filename);
-            return -1;
+
+            if (cachedDirectoryFileInformation.ContainsKey(filename))
+            {
+                info.IsDirectory = cachedDirectoryFileInformation[filename].IsDirectory;
+                return 0;
+            }
+            else
+            {
+                RaiseDebug("CreateFile not cached: " + filename);
+                return -DokanNet.ERROR_FILE_NOT_FOUND;
+            }
         }
 
         public int DeleteDirectory(string filename, DokanFileInfo info)
@@ -54,7 +103,26 @@ namespace Forge.MountFTP
         public int FindFiles(string filename, ArrayList files, DokanFileInfo info)
         {
             RaiseMethodCall("FindFiles " + filename);
-            return -1;
+
+            var parentDirectory = filename;
+            const string BACKSLASH = "\\";
+            if (!filename.EndsWith(BACKSLASH))
+            {
+                parentDirectory += BACKSLASH;
+            }
+
+            IList<DirectoryListItem> directoryList = null;
+            EnqueueTask(() => directoryList = fTPSClient.GetDirectoryList(GetUrl(filename))).Wait();
+
+            directoryList
+                .Select(dli => GetDirectoryFileInformation(parentDirectory, dli))
+                .ForEach(dfi =>
+                {
+                    cachedDirectoryFileInformation[parentDirectory + dfi.FileName] = dfi;
+                    files.Add(dfi);
+                });
+
+            return 0;
         }
 
         public int FlushFileBuffers(string filename, DokanFileInfo info)
@@ -66,13 +134,31 @@ namespace Forge.MountFTP
         public int GetDiskFreeSpace(ref ulong freeBytesAvailable, ref ulong totalBytes, ref ulong totalFreeBytes, DokanFileInfo info)
         {
             RaiseMethodCall("GetDiskFreeSpace");
-            return -1;
+            return 0;
         }
 
         public int GetFileInformation(string filename, FileInformation fileinfo, DokanFileInfo info)
         {
             RaiseMethodCall("GetFileInformation " + filename);
-            return -1;
+
+            if (cachedDirectoryFileInformation.ContainsKey(filename))
+            {
+                var cachedFileInfo = cachedDirectoryFileInformation[filename];
+
+                fileinfo.FileName = cachedFileInfo.FileName;
+                fileinfo.CreationTime = cachedFileInfo.CreationTime;
+                fileinfo.LastAccessTime = cachedFileInfo.LastAccessTime;
+                fileinfo.LastWriteTime = cachedFileInfo.LastWriteTime;
+                fileinfo.Length = cachedFileInfo.Length;
+                fileinfo.Attributes = cachedFileInfo.Attributes;
+
+                return 0;
+            }
+            else
+            {
+                RaiseDebug("GetFileInformation not cached: " + filename);
+                return -DokanNet.ERROR_FILE_NOT_FOUND;
+            }
         }
 
         public int LockFile(string filename, long offset, long length, DokanFileInfo info)
@@ -90,7 +176,7 @@ namespace Forge.MountFTP
         public int OpenDirectory(string filename, DokanFileInfo info)
         {
             RaiseMethodCall("OpenDirectory " + filename);
-            return -1;
+            return 0;
         }
 
         public int ReadFile(string filename, byte[] buffer, ref uint readBytes, long offset, DokanFileInfo info)
@@ -143,6 +229,13 @@ namespace Forge.MountFTP
 
         #endregion
 
+        Task EnqueueTask(Action action)
+        {
+            var task = new Task(action);
+            fTPSClientTaskQueue.Add(task);
+            return task;
+        }
+
         void RaiseMethodCall(string message)
         {
             if (MethodCall != null)
@@ -156,6 +249,90 @@ namespace Forge.MountFTP
             if (Debug != null)
             {
                 Debug(this, new LogEventArgs(message));
+            }
+        }
+
+        static string GetUrl(string filename)
+        {
+            return filename.Replace('\\', '/');
+        }
+
+        DirectoryFileInformation GetDirectoryFileInformation(string parentDirectory, DirectoryListItem directoryListItem)
+        {
+            var path = parentDirectory + directoryListItem.Name;
+            var lastWriteTime = directoryListItem.IsDirectory ?
+                directoryListItem.CreationTime :
+                GetCachedLastWriteTime(path) ?? directoryListItem.CreationTime;
+
+            return new DirectoryFileInformation(directoryListItem)
+            {
+                LastAccessTime = lastWriteTime,
+                LastWriteTime = lastWriteTime,
+                Length = directoryListItem.IsDirectory ? default(long) : GetCachedLength(path),
+            };
+        }
+
+        DateTime? GetLastWriteTime(string fileName)
+        {
+            DateTime? fileModificationTime = null;
+            EnqueueTask(() => fileModificationTime = fTPSClient.GetFileModificationTime(fileName)).Wait();
+            return fileModificationTime;
+        }
+
+        DateTime? GetCachedLastWriteTime(string fileName)
+        {
+            return cachedDirectoryFileInformation.ContainsKey(fileName) ?
+                cachedDirectoryFileInformation[fileName].LastWriteTime :
+                GetLastWriteTime(fileName);
+        }
+
+        long GetLength(string fileName)
+        {
+            long fileTransferSize = default(long);
+            EnqueueTask(() => fileTransferSize = (long)(fTPSClient.GetFileTransferSize(fileName) ?? default(ulong))).Wait();
+            return fileTransferSize;
+        }
+
+        long GetCachedLength(string fileName)
+        {
+            return cachedDirectoryFileInformation.ContainsKey(fileName) ?
+                cachedDirectoryFileInformation[fileName].Length :
+                GetLength(fileName);
+        }
+
+        class DirectoryFileInformation : FileInformation
+        {
+            bool isDirectory;
+            internal bool IsDirectory
+            {
+                get
+                {
+                    return isDirectory;
+                }
+                private set
+                {
+                    isDirectory = value;
+                    Attributes = value ?
+                        FileAttributes.Directory :
+                        FileAttributes.Normal;
+                }
+            }
+
+            internal DirectoryFileInformation(bool isDirectory)
+            {
+                CreationTime = DateTime.Now;
+                LastAccessTime = DateTime.Now;
+                LastWriteTime = DateTime.Now;
+                IsDirectory = isDirectory;
+            }
+
+            internal DirectoryFileInformation(DirectoryListItem directoryListItem)
+            {
+                FileName = directoryListItem.Name;
+                CreationTime = directoryListItem.CreationTime;
+                LastAccessTime = directoryListItem.CreationTime;
+                LastWriteTime = directoryListItem.CreationTime;
+                IsDirectory = directoryListItem.IsDirectory;
             }
         }
     }

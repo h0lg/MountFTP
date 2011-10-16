@@ -36,15 +36,23 @@
     </Compile>
     <Compile Include="DokanFtpClient.cs" />
     <Compile Include="Drive.cs" />
+    <Compile Include="IEnumerableExtensions.cs" />
+    <Compile Include="IFtpOptions.cs" />
     <Compile Include="LogEventArgs.cs" />
     <Compile Include="Options.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
+    <Reference Include="AlexPilotti.FTPS.Client">
+      <HintPath>..\packages\AlexFTPS.1.1.0.27735\lib\net20\AlexPilotti.FTPS.Client.dll</HintPath>
+    </Reference>
     <Reference Include="DokanNet">
       <HintPath>..\libs\DokanNet\x86 Release\DokanNet.dll</HintPath>
     </Reference>
     <Reference Include="System" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

@@ -1,3 +1,5 @@
+using AlexPilotti.FTPS.Client;
+using AlexPilotti.FTPS.Common;
 using Dokan;
 
 namespace Forge.MountFTP
@@ -9,6 +11,16 @@ namespace Forge.MountFTP
     public class Drive
     {
         readonly Options options;
+
+        /// <summary>
+        /// Occurs when an FTP command is issued.
+        /// </summary>
+        public event LogEventHandler FtpCommand;
+
+        /// <summary>
+        /// Occurs when a reply from the FTP server is received.
+        /// </summary>
+        public event LogEventHandler FtpServerReply;
 
         /// <summary>
         /// Occurs when a method on the FTP client is called.
@@ -37,7 +49,11 @@ namespace Forge.MountFTP
         {
             string result;
 
-            var dokanFtpClient = new DokanFtpClient();
+            var fTPSClient = new FTPSClient();
+            fTPSClient.LogCommand += new LogCommandEventHandler(OnFTPSClientLogCommand);
+            fTPSClient.LogServerReply += new LogServerReplyEventHandler(OnFTPSClientLogServerReply);
+
+            var dokanFtpClient = new DokanFtpClient(fTPSClient, options);
             dokanFtpClient.MethodCall += new LogEventHandler(OnFtpClientMethodCall);
             dokanFtpClient.Debug += new LogEventHandler(OnFtpClientDebug);
 
@@ -68,6 +84,28 @@ namespace Forge.MountFTP
             }
 
             return result;
+        }
+
+        void OnFTPSClientLogCommand(object sender, LogCommandEventArgs args)
+        {
+            if (FtpCommand != null)
+            {
+                FtpCommand(this, new LogEventArgs(args.CommandText));
+            }
+        }
+
+        void OnFTPSClientLogServerReply(object sender, LogServerReplyEventArgs args)
+        {
+            if (FtpServerReply != null)
+            {
+                FtpServerReply(
+                    this,
+                    new LogEventArgs(
+                        string.Format(
+                            "{0} {1}",
+                            args.ServerReply.Code,
+                            args.ServerReply.Message)));
+            }
         }
 
         void OnFtpClientMethodCall(object sender, LogEventArgs args)
