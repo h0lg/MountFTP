@@ -269,7 +269,14 @@ namespace Forge.MountFTP
         public int SetEndOfFile(string filename, long length, DokanFileInfo info)
         {
             RaiseMethodCall("SetEndOfFile " + filename);
-            return -1;
+
+            cachedDirectoryFileInformation[filename] = new DirectoryFileInformation(false)
+            {
+                FileName = filename,
+                Length = length
+            };
+
+            return 0;
         }
 
         public int SetFileAttributes(string filename, FileAttributes attr, DokanFileInfo info)
