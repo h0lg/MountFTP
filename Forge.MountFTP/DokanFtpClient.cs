@@ -306,7 +306,40 @@ namespace Forge.MountFTP
         public int WriteFile(string filename, byte[] buffer, ref uint writtenBytes, long offset, DokanFileInfo info)
         {
             RaiseMethodCall("WriteFile " + filename);
-            return -1;
+
+            long cachedLength = GetCachedLength(filename);
+
+            if (buffer.Length < cachedLength) // only part of file is in the buffer
+            {
+                // no part of file has been cached before
+                if (bufferedFileName != filename)
+                {
+                    bufferedFileName = filename;
+                    bufferedFile = new byte[cachedLength];
+                }
+
+                Array.Copy(
+                    buffer,
+                    0,
+                    bufferedFile,
+                    (int)offset,
+                    buffer.Length);
+
+                bufferedBytes = (int)offset + buffer.Length;
+
+                if (bufferedBytes == cachedLength)
+                {
+                    EnqueueUploadTask(filename, bufferedFile);
+                }
+            }
+            else
+            {
+                EnqueueUploadTask(filename, buffer);
+            }
+
+            writtenBytes = (uint)buffer.Length;
+
+            return 0;
         }
 
         #endregion
@@ -316,6 +349,17 @@ namespace Forge.MountFTP
             var task = new Task(action);
             fTPSClientTaskQueue.Add(task);
             return task;
+        }
+
+        void EnqueueUploadTask(string filename, byte[] buffer)
+        {
+            EnqueueTask(() =>
+            {
+                using (var ftpStream = fTPSClient.PutFile(filename))
+                {
+                    ftpStream.Write(buffer, 0, buffer.Length);
+                }
+            }).Wait();
         }
 
         void RaiseMethodCall(string message)
