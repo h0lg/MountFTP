@@ -137,6 +137,14 @@ namespace Forge.MountFTP
         public int GetDiskFreeSpace(ref ulong freeBytesAvailable, ref ulong totalBytes, ref ulong totalFreeBytes, DokanFileInfo info)
         {
             RaiseMethodCall("GetDiskFreeSpace");
+
+            totalFreeBytes =
+            freeBytesAvailable = 1073741824; // == 1GB
+            totalBytes = (ulong)cachedDirectoryFileInformation
+                .Select(dfi => dfi.Value.Length)
+                .Aggregate((sum, length) => sum += length)
+                + totalFreeBytes;
+
             return 0;
         }
 
