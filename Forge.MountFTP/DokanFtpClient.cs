@@ -77,18 +77,37 @@ namespace Forge.MountFTP
 
         public int CreateFile(string filename, FileAccess access, FileShare share, FileMode mode, FileOptions options, DokanFileInfo info)
         {
-            RaiseMethodCall("CreateFile " + filename);
+            RaiseMethodCall(string.Format("CreateFile {0} FileMode: {1}", filename, mode));
 
-            if (cachedDirectoryFileInformation.ContainsKey(filename))
+            switch (mode)
             {
-                info.IsDirectory = cachedDirectoryFileInformation[filename].IsDirectory;
-                return 0;
+                case FileMode.Append:
+                    break;
+                case FileMode.Create:
+                    break;
+                case FileMode.CreateNew:
+                    EnqueueTask(() => fTPSClient.PutFile(filename).Dispose()).Wait();
+                    return 0;
+                case FileMode.Open:
+                    if (cachedDirectoryFileInformation.ContainsKey(filename))
+                    {
+                        info.IsDirectory = cachedDirectoryFileInformation[filename].IsDirectory;
+                        return 0;
+                    }
+                    else
+                    {
+                        RaiseDebug("CreateFile not cached: " + filename);
+                        return -DokanNet.ERROR_FILE_NOT_FOUND;
+                    }
+                case FileMode.OpenOrCreate:
+                    break;
+                case FileMode.Truncate:
+                    break;
+                default:
+                    break;
             }
-            else
-            {
-                RaiseDebug("CreateFile not cached: " + filename);
-                return -DokanNet.ERROR_FILE_NOT_FOUND;
-            }
+
+            return -1;
         }
 
         public int DeleteDirectory(string filename, DokanFileInfo info)
