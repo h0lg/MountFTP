@@ -119,7 +119,10 @@ namespace Forge.MountFTP
         public int DeleteFile(string filename, DokanFileInfo info)
         {
             RaiseMethodCall("DeleteFile " + filename);
-            return -1;
+
+            EnqueueTask(() => fTPSClient.DeleteFile(filename)).Wait();
+
+            return 0;
         }
 
         public int FindFiles(string filename, ArrayList files, DokanFileInfo info)
