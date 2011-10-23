@@ -116,7 +116,10 @@ namespace Forge.MountFTP
         public int DeleteDirectory(string filename, DokanFileInfo info)
         {
             RaiseMethodCall("DeleteDirectory " + filename);
-            return -1;
+
+            EnqueueTask(() => fTPSClient.RemoveDir(filename)).Wait();
+
+            return 0;
         }
 
         public int DeleteFile(string filename, DokanFileInfo info)
