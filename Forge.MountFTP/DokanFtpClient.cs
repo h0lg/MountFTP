@@ -206,7 +206,10 @@ namespace Forge.MountFTP
         public int MoveFile(string filename, string newname, bool replace, DokanFileInfo info)
         {
             RaiseMethodCall("MoveFile " + filename + " to " + newname);
-            return -1;
+
+            EnqueueTask(() => fTPSClient.RenameFile(filename, newname)).Wait();
+
+            return 0;
         }
 
         public int OpenDirectory(string filename, DokanFileInfo info)
