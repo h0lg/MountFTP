@@ -72,6 +72,9 @@ namespace Forge.MountFTP
         public int CreateDirectory(string filename, DokanFileInfo info)
         {
             RaiseMethodCall("CreateDirectory " + filename);
+
+            EnqueueTask(() => fTPSClient.MakeDir(filename)).Wait();
+
             return 0;
         }
 
