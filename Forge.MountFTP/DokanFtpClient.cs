@@ -124,6 +124,20 @@ namespace Forge.MountFTP
         {
             RaiseMethodCall("DeleteDirectory " + filename);
 
+            var filesToDelete = cachedDirectoryFileInformation
+                .Where(kvp => kvp.Key.StartsWith(filename))
+                .Where(kvp => kvp.Key != filename)
+                .OrderByDescending(kvp => kvp.Key.Length)
+                .ToArray();
+
+            filesToDelete
+                .Where(kvp => !kvp.Value.IsDirectory)
+                .ForEach(kvp => DeleteFile(kvp.Key, info));
+
+            filesToDelete
+                .Where(kvp => kvp.Value.IsDirectory)
+                .ForEach(kvp => DeleteDirectory(kvp.Key, info));
+
             EnqueueTask(() => fTPSClient.RemoveDir(filename)).Wait();
             cachedDirectoryFileInformation.Remove(filename);
 
