@@ -118,6 +118,7 @@ namespace Forge.MountFTP
             RaiseMethodCall("DeleteDirectory " + filename);
 
             EnqueueTask(() => fTPSClient.RemoveDir(filename)).Wait();
+            cachedDirectoryFileInformation.Remove(filename);
 
             return 0;
         }
@@ -127,6 +128,7 @@ namespace Forge.MountFTP
             RaiseMethodCall("DeleteFile " + filename);
 
             EnqueueTask(() => fTPSClient.DeleteFile(filename)).Wait();
+            cachedDirectoryFileInformation.Remove(filename);
 
             return 0;
         }
