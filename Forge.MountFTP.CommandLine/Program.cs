@@ -5,6 +5,8 @@ namespace Forge.MountFTP.CommandLine
 {
     class Program
     {
+        static object writeToken = new { };
+
         static void Main(string[] args)
         {
             var drive = new Drive(Configuration.Configure<Options>().CreateAndBind(args));
@@ -19,9 +21,12 @@ namespace Forge.MountFTP.CommandLine
 
         static void WriteColoredLine(string message, ConsoleColor foreGroundColor)
         {
-            Console.ForegroundColor = foreGroundColor;
-            Console.WriteLine(message);
-            Console.ResetColor();
+            lock (writeToken)
+            {
+                Console.ForegroundColor = foreGroundColor;
+                Console.WriteLine(message);
+                Console.ResetColor();
+            }
         }
 
         static void OnFtpCommand(object sender, LogEventArgs args)
