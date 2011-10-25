@@ -73,7 +73,14 @@ namespace Forge.MountFTP
         {
             RaiseMethodCall("CreateDirectory " + filename);
 
-            EnqueueTask(() => fTPSClient.MakeDir(filename)).Wait();
+            EnqueueTask(() =>
+            {
+                if (!cachedDirectoryFileInformation.ContainsKey(filename))
+                {
+                    fTPSClient.MakeDir(filename);
+                    cachedDirectoryFileInformation[filename] = new DirectoryFileInformation(true) { FileName = filename };
+                }
+            }).Wait();
 
             return 0;
         }
